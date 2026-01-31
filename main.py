@@ -5,10 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Kjo siguron që folderi 'app' të njihet si modul nga Python
+# Ky rresht rregullon gabimet e importeve ne Render
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Importimi i router-ave (Sigurohu që skedarët në app/api/ kanë 'router = APIRouter()')
+# Importimi i moduleve nga folderi app/api
 try:
     from app.api.m3u import router as m3u_router
     from app.api.xtream import router as xtream_router
@@ -18,57 +18,51 @@ except ImportError as e:
     raise e
 
 # -----------------------
-# Database setup
+# Database setup (I SIGURT)
 # -----------------------
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://blesio:nretgihTI3bZdKLMMBlvmntbf51N4tDX@dpg-d5ufr9ngi27c7396fes0-a/iptvott_backend"
-)
+# Tani kodi e merr lidhjen nga 'Environment Variables' ne Render
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = None
+SessionLocal = None
+
+if DATABASE_URL:
+    engine = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+else:
+    print("KUJDES: DATABASE_URL nuk u gjet!")
 
 # -----------------------
 # FastAPI app
 # -----------------------
 app = FastAPI(
     title="IPTV Backend API",
-    description="API për IPTV me M3U, Stalker dhe Xtream",
+    description="API per IPTV",
     version="1.0.0",
 )
 
 # -----------------------
-# CORS setup
+# CORS (Lejon frontend-in te lidhet)
 # -----------------------
-origins = [
-    "https://blesioiptv.netlify.app",  # Domaini yt frontend
-    "http://localhost",
-    "http://localhost:3000",
-    "*" # Lejon testimin nga çdo vend përkohësisht
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # -----------------------
-# Include routers
+# Lidhja e rrugëve (Routes)
 # -----------------------
 app.include_router(m3u_router, prefix="/api/m3u", tags=["m3u"])
 app.include_router(stalker_router, prefix="/api/stalker", tags=["stalker"])
 app.include_router(xtream_router, prefix="/api/xtream", tags=["xtream"])
 
-# -----------------------
-# Root endpoint
-# -----------------------
 @app.get("/")
 def root():
     return {
         "status": "Online",
-        "message": "IPTV Backend is running successfully!",
+        "message": "IPTV Backend po punon shkelqyeshem!",
         "docs": "/docs"
     }
