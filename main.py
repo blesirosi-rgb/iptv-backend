@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from database import init_db
 from app.api.device import router as device_router
 from app.api.playlists import router as playlists_router
 
@@ -20,9 +19,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ─── Database Init ──────────────────────────────────────────
-init_db()
 
 # ─── Routes ─────────────────────────────────────────────────
 app.include_router(device_router, prefix="/api/device", tags=["device"])

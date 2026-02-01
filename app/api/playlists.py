@@ -1,9 +1,14 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from database import get_db
 
 router = APIRouter()
+
+# ─── In-Memory Storage ──────────────────────────────────────
+# Playlists ruhen ne memory — nuk nevroj database
+# Format: { "MAC_ADDRESS": [ {playlist}, {playlist}, ... ] }
+playlists_db = {}
+next_id = 1  # Auto-increment ID
 
 # ─── Models ─────────────────────────────────────────────────
 class PlaylistAdd(BaseModel):
@@ -21,26 +26,10 @@ class PlaylistUpdate(BaseModel):
     password: Optional[str] = None
 
 # ─── GET /{mac_address} ─────────────────────────────────────
-# Ngarkim te gjitha playlists nga nje device
 @router.get("/{mac_address}")
 async def get_playlists(mac_address: str):
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM playlists WHERE mac_address = ?", (mac_address.upper(),))
-    rows = cursor.fetchall()
-    conn.close()
-
-    playlists = []
-    for row in rows:
-        playlists.append({
-            "id": row["id"],
-            "playlist_name": row["playlist_name"],
-            "playlist_type": row["playlist_type"],
-            "playlist_url": row["playlist_url"],
-            "username": row["username"],
-            "password": row["password"]
-        })
+    mac = mac_address.strip().upper()
+    playlists = playlists_db.get(mac, [])
 
     return {
         "success": True,
@@ -48,9 +37,10 @@ async def get_playlists(mac_address: str):
     }
 
 # ─── POST /add ──────────────────────────────────────────────
-# Shtim playlist te re
 @router.post("/add")
 async def add_playlist(data: PlaylistAdd):
+    global next_id
+
     mac = data.mac_address.strip().upper()
     name = data.playlist_name.strip()
     ptype = data.playlist_type.strip().upper()
@@ -58,6 +48,7 @@ async def add_playlist(data: PlaylistAdd):
     username = data.username.strip() if data.username else None
     password = data.password.strip() if data.password else None
 
+    # Validim
     if not mac:
         raise HTTPException(status_code=400, detail="MAC address i detyroshem!")
     if not name:
@@ -67,26 +58,29 @@ async def add_playlist(data: PlaylistAdd):
     if ptype not in ["M3U", "XTREAM", "STALKER"]:
         raise HTTPException(status_code=400, detail="Playlist type i gauar! (M3U, XTREAM, STALKER)")
 
-    conn = get_db()
-    cursor = conn.cursor()
+    # Kriim playlist
+    playlist = {
+        "id": next_id,
+        "playlist_name": name,
+        "playlist_type": ptype,
+        "playlist_url": url,
+        "username": username,
+        "password": password
+    }
+    next_id += 1
 
-    cursor.execute("""
-        INSERT INTO playlists (mac_address, playlist_name, playlist_type, playlist_url, username, password)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (mac, name, ptype, url, username, password))
-
-    conn.commit()
-    playlist_id = cursor.lastrowid
-    conn.close()
+    # Ruaj ne memory
+    if mac not in playlists_db:
+        playlists_db[mac] = []
+    playlists_db[mac].append(playlist)
 
     return {
         "success": True,
         "message": "Playlist u shtua me sukses!",
-        "id": playlist_id
+        "id": playlist["id"]
     }
 
 # ─── PUT /{id} ──────────────────────────────────────────────
-# Ndryshim playlist nga ID
 @router.put("/{id}")
 async def update_playlist(id: int, data: PlaylistUpdate):
     name = data.playlist_name.strip()
@@ -99,50 +93,32 @@ async def update_playlist(id: int, data: PlaylistUpdate):
     if not url:
         raise HTTPException(status_code=400, detail="Playlist URL i detyroshem!")
 
-    conn = get_db()
-    cursor = conn.cursor()
+    # Kerkim playlist nga ID te gjitha MAC-t
+    for mac in playlists_db:
+        for playlist in playlists_db[mac]:
+            if playlist["id"] == id:
+                playlist["playlist_name"] = name
+                playlist["playlist_url"] = url
+                playlist["username"] = username
+                playlist["password"] = password
+                return {
+                    "success": True,
+                    "message": "Playlist u ndryshuar me sukses!"
+                }
 
-    cursor.execute("SELECT * FROM playlists WHERE id = ?", (id,))
-    existing = cursor.fetchone()
-
-    if not existing:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Playlist nuk u gjet!")
-
-    cursor.execute("""
-        UPDATE playlists
-        SET playlist_name = ?, playlist_url = ?, username = ?, password = ?
-        WHERE id = ?
-    """, (name, url, username, password, id))
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "success": True,
-        "message": "Playlist u ndryshuar me sukses!"
-    }
+    raise HTTPException(status_code=404, detail="Playlist nuk u gjet!")
 
 # ─── DELETE /{id} ───────────────────────────────────────────
-# Fshirje playlist nga ID
 @router.delete("/{id}")
 async def delete_playlist(id: int):
-    conn = get_db()
-    cursor = conn.cursor()
+    # Kerkim dhe fshim playlist nga ID
+    for mac in playlists_db:
+        for i, playlist in enumerate(playlists_db[mac]):
+            if playlist["id"] == id:
+                playlists_db[mac].pop(i)
+                return {
+                    "success": True,
+                    "message": "Playlist u fshi me sukses!"
+                }
 
-    cursor.execute("SELECT * FROM playlists WHERE id = ?", (id,))
-    existing = cursor.fetchone()
-
-    if not existing:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Playlist nuk u gjet!")
-
-    cursor.execute("DELETE FROM playlists WHERE id = ?", (id,))
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "success": True,
-        "message": "Playlist u fshi me sukses!"
-    }
+    raise HTTPException(status_code=404, detail="Playlist nuk u gjet!")
