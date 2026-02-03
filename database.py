@@ -1,13 +1,15 @@
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import os
 
-DB_PATH = "iptv.db"
+# Render e jep URL-në e databazës përmes kësaj variable mjedisi
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # ─── Connection ─────────────────────────────────────────────
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    # Lidhja me PostgreSQL në Render
+    # sslmode='require' është i domosdoshëm për Render
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
 # ─── Init DB ────────────────────────────────────────────────
@@ -16,9 +18,10 @@ def init_db():
     cursor = conn.cursor()
 
     # Table: devices
+    # Kujdes: PostgreSQL përdor SERIAL për ID-të automatike
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS devices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             mac_address TEXT UNIQUE NOT NULL,
             device_key TEXT NOT NULL,
             status TEXT DEFAULT 'active',
@@ -29,7 +32,7 @@ def init_db():
     # Table: playlists
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS playlists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             mac_address TEXT NOT NULL,
             playlist_name TEXT NOT NULL,
             playlist_type TEXT NOT NULL,
@@ -40,4 +43,6 @@ def init_db():
     """)
 
     conn.commit()
+    cursor.close()
     conn.close()
+    print("✅ Databaza PostgreSQL u inicializua me sukses!")
