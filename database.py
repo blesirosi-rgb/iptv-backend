@@ -2,23 +2,27 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
 
-# Render e jep URL-në e databazës përmes kësaj variable mjedisi
+# 🔐 SIGURIA: Nuk e shkruajmë linkun këtu. 
+# Kodi e kërkon atë automatikisht te "Environment Variables" të Render.
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# ─── Connection ─────────────────────────────────────────────
 def get_db():
+    if not DATABASE_URL:
+        # Nëse harron ta vendosësh në Render, ky mesazh do të të njoftojë
+        print("❌ GABIM: DATABASE_URL nuk u gjet! Konfiguroje në Render.")
+        return None
+    
     # Lidhja me PostgreSQL në Render
-    # sslmode='require' është i domosdoshëm për Render
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
-# ─── Init DB ────────────────────────────────────────────────
 def init_db():
     conn = get_db()
+    if conn is None: return
+    
     cursor = conn.cursor()
 
-    # Table: devices
-    # Kujdes: PostgreSQL përdor SERIAL për ID-të automatike
+    # Tabela e pajisjeve
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS devices (
             id SERIAL PRIMARY KEY,
@@ -29,7 +33,7 @@ def init_db():
         )
     """)
 
-    # Table: playlists
+    # Tabela e playlistave
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS playlists (
             id SERIAL PRIMARY KEY,
@@ -45,4 +49,4 @@ def init_db():
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ Databaza PostgreSQL u inicializua me sukses!")
+    print("✅ Databaza PostgreSQL u inicializua në mënyrë të sigurt!")
